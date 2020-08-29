@@ -18,7 +18,7 @@ class UserList extends React.Component {
     error: null
   }
 
-  async componentWillReceiveProps(nextProps)  {
+  async componentWillReceiveProps(nextProps) {
     let searchName = nextProps.searchName
     console.log('发送ajax请求', searchName)
     const url = `https://api.github.com/search/users?q=${searchName}`

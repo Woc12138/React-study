@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>新生命周期测试</title>
+  <link rel="stylesheet" href="css/bootstrap.css">
+  <link rel="stylesheet" href="css/index.css">
+
+</head>
+
+<body>
+  <div id="example"></div>
+
+  <!-- <script type="text/javascript" src="../js/react.development.js"></script> -->
+  <!-- <script type="text/javascript" src="../js/react-dom.development.js"></script> -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/axios/0.20.0/axios.js"></script>
+  <script src="https://cdn.staticfile.org/react/16.4.0/umd/react.development.js"></script>
+  <script src="https://cdn.staticfile.org/react-dom/16.4.0/umd/react-dom.development.js"></script>
+  <script type="text/javascript" src="../js/babel.min.js"></script>
+
+  <script type="text/babel">
+    /*
+  需求: 自定义App组件和Life组件
+    1. 异步ajax请求实现users应用
+    2. 用新的生命周期钩子函数 getDerivedStateFromProps
+    3. 点击'我不活啦'按钮从界面中移除组件界面
+    4. 参考官方文档：props 更新时获取外部数据
+    (https://react.docschina.org/blog/2018/03/27/update-on-async-rendering.html#fetching-external-data-when-props-change)
+    5.这样用props传递数据很麻烦，而用pubsub.js库进行组件通信，发布消息时触发带有数据作为参数的事件，则可以避免用props的变化触发ajax请求
+    */
+  class Life extends React.Component {
+
+    constructor(props) {
+      super(props)
+      // 初始化状态
+      this.state = {
+        users: null,
+        errorMsg: null
+      }
+      this.source = axios.CancelToken.source() //生成取消令牌用于组件卸载时阻止axios请求
+    }
+
+    static getDerivedStateFromProps(props, state) {
+      console.log('getDerivedStateFromProps()')
+      // 保存searchName在state中，以便我们在props变化时进行对比。
+      // 清除之前加载的数据（这样我们就不会渲染旧的内容）。
+      if(props.searchName !== '' & state.searchName !== props.searchName) { // 不一样才更新state.users为null
+        console.log('传入新的searchName')
+        return { //返回对象映射到state中
+          users: null, //users为null表示componentDidUpdate中可以请求新数据
+          searchName: props.searchName,
+        }
+        /* return后的新state为：{
+          users: null,
+          errorMsg: null,
+          searchName: props.searchName,
+        }*/
+      }
+      return null // 否则不更新state
+    }
+
+    componentDidMount() {
+      console.log('componentDidMount()')
+      // 调用axios方法
+      this._loadAsyncData(this.props.searchName);
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+      console.log('componentDidUpdate()')
+      const {searchName} = this.props
+      if(this.state.users === null) { //判断当state.users为null时
+        // 调用axios方法
+        this._loadAsyncData(this.props.searchName);
+      }
+    }
+
+    componentWillUnmount() {
+      console.log('componentWillUnmount()')
+      // 阻止异步操作：通过离开页面时重写setState方法且不返回任何数据来解决,使得组件中的setState方法无效
+      /*this.setState = (state, callback) => {
+        console.log(state, callback)
+        return;
+      }*/
+      // 阻止axios请求，清理异步请求，否则会内存泄漏
+      if (this._asyncRequest) {
+        //如果this._asyncRequest不为null说明请求失败一直在进行请求
+        //如果this._asyncRequest为null说明请求成功了不需要清除请求
+        console.log('this._asyncRequest', this._asyncRequest)
+        this.source.cancel('取消请求'); //根据token值清除axios请求
+      }
+    }
+
+    // 异步axios请求方法
+    _loadAsyncData(searchName) {
+      console.log('searchName', searchName)
+      if(searchName) { //如果有searchName
+        const url = `http://api.github.com/search/users?q=${searchName}`
+        // 将axios请求绑定到组件实例this上
+        this._asyncRequest = axios.get(url, {
+          cancelToken: this.source.token // axios请求的token值
+        })
+          .then(response => {
+            this._asyncRequest = null; //请求成功就设为null在销毁阶段判断
+            // 得到相应数据
+            const result = response.data
+            const users = result.items.map(item => ({
+              name: item.login,
+              url: item.html_url,
+              avatarUrl: item.avatar_url
+            }))
+            console.log('请求成功')
+            // 更新状态（成功）
+            this.setState({users})
+          })
+          .catch(error => {
+            if (axios.isCancel(error)) {
+              console.log('Request canceled', error.message);
+            } else {
+              console.log('请求失败')
+              // 更新状态（失败）
+              this.setState({errorMsg: error.message})
+            }
+          })
+      }
+    }
+
+    render() {
+      const {users} = this.state
+      console.log('render()',this.state) // 状态state更新就会调用render()
+      if (users == null) { // 加载状态
+        return <h2>Enter name to search</h2>
+      } else { // 真实UI
+        return (
+          <div className="row">
+            {
+              users.map((user, index) => (
+                <div className="card" key={index}>
+                  <a href={user.url}>
+                    <img src={user.avatarUrl} alt="img" style={{width: 100}}/>
+                  </a>
+                  <p className="card-text">{user.name}</p>
+                </div>
+              ))
+            }
+          </div>
+        )
+      }
+    }
+  }
+
+  class App extends React.Component {
+
+    constructor(props) {
+      super(props)
+      // 初始化状态
+      this.state = {
+        searchName: ''
+      }
+    }
+    // 点击search方法
+    search = () => {
+      // 得到输入的关键字
+      const searchName = this.input.value.trim()
+      if(searchName) {
+        // 更新state
+        this.setState({searchName})
+      }
+    }
+
+    // 销毁组件方法
+    removeComponent () {
+      ReactDOM.unmountComponentAtNode(document.getElementById('example'))
+    }
+
+    render() {
+      return (
+        <div>
+          <input type="text" placeholder="enter the name you search" ref={input => this.input = input} />
+          &nbsp;&nbsp;<button onClick={this.search}>Search</button>
+          &nbsp;&nbsp;<button onClick={this.removeComponent}>不活了</button>
+          <Life searchName={this.state.searchName}/>
+        </div>
+      )
+    }
+  }
+
+  ReactDOM.render(<App />, document.getElementById('example'))
+</script>
+</body>
+
+</html>
