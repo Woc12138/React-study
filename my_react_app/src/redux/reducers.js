@@ -24,5 +24,5 @@ export default combineReducers({ //当有多个reducer时，用combineReducer合
   // counter,
   comments, // 指定reducer中对应的属性
 })
-// redux向外暴露的state是什么结构？
+// redux向外暴露的state是什么结构？（在connect里用）
 // {counter: 0, comments: []}

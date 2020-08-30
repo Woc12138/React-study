@@ -1,5 +1,5 @@
 /*
-  包含所有action creator(action的工厂函数)
+  包含所有action creator(创建action的工厂函数)
 */
 import {ADD_COMMENT, DELETE_COMMENT, RECEIVE_COMMENTS} from './action-types'
 
